@@ -245,6 +245,18 @@ const Attendance = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{isEditing ? 'Edit Attendance Record' : 'Add Attendance Record'}</Text>
+
+            {isEditing && currentRecord.RecordID && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Record ID</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: '#f0f0f0' }]}
+                  value={String(currentRecord.RecordID)} // Ensure value is a string
+                  editable={false}
+                  placeholder="Record ID (Auto-generated)"
+                />
+              </View>
+            )}
             
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Student ID</Text>
@@ -473,7 +485,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bsold',
+    fontWeight: 'bold',
     color: COLORS.secondary,
     marginBottom: 20,
     textAlign: 'center',

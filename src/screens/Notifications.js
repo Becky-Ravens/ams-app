@@ -20,11 +20,7 @@ const Notifications = ({ navigation }) => {
     NotificationID: '',
     StudentID: '',
     ClassID: '',
-    Date: new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).split('/').join('-'),
+    Date: new Date().toISOString().split('T')[0], // This will give YYYY-MM-DD format
     NotificationType: '',
     NotificationText: '',
   });
@@ -71,11 +67,10 @@ const Notifications = ({ navigation }) => {
       setLoading(false);
     }
   };
-
   const markAsRead = async (id) => {
     try {
       const formData = new FormData();
-      formData.append('id', id);
+      formData.append('NotificationID', id);
       formData.append('status', 'read');
 
       const response = await fetch(
@@ -110,32 +105,78 @@ const Notifications = ({ navigation }) => {
           onPress: async () => {
             try {
               const formData = new FormData();
-              formData.append('id', id);
-
+              formData.append('NotificationID', id);
               const response = await fetch(
-                'http://192.168.43.135/ams_backend/api.php?table=notifications&action=delete',
+                'http://192.168.43.253/ams_backend/api.php?table=notifications&action=delete',
                 {
                   method: 'POST',
                   body: formData,
                 }
-              );
-              const result = await response.json();
+              );              const result = await response.json();
 
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              
               if (result.status) {
                 fetchNotifications(); // Refresh the list
                 Alert.alert('Success', 'Notification deleted successfully');
               } else {
-                Alert.alert('Error', result.message);
+                Alert.alert('Error', result.message || 'Failed to delete notification');
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete notification');
+              Alert.alert('Error', `Failed to delete notification: ${error.message}`);
               console.error(error);
             }
           },
         },
       ]
     );
+  };  const handleUpdateNotification = async () => {
+    if (!newNotification.StudentID || !newNotification.ClassID || !newNotification.NotificationType || !newNotification.NotificationText) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('id', newNotification.NotificationID);
+      formData.append('StudentID', newNotification.StudentID);
+      formData.append('ClassID', newNotification.ClassID);
+      formData.append('Date', newNotification.Date);
+      formData.append('NotificationType', newNotification.NotificationType);
+      formData.append('NotificationText', newNotification.NotificationText);
+
+      const response = await fetch(
+        'http://192.168.43.253/ams_backend/api.php?table=notifications&action=update',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      const result = await response.json();
+
+      if (result.status) {
+        fetchNotifications();
+        setModalVisible(false);
+        setNewNotification({
+          NotificationID: '',
+          StudentID: '',
+          ClassID: '',
+          Date: new Date().toISOString().split('T')[0],
+          NotificationType: '',
+          NotificationText: ''
+        });
+        Alert.alert('Success', 'Notification updated successfully');
+      } else {
+        Alert.alert('Error', result.message);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update notification');
+      console.error(error);
+    }
   };
+
   const handleAddNotification = async () => {
     if (!newNotification.StudentID || !newNotification.ClassID || !newNotification.NotificationType || !newNotification.NotificationText) {
       Alert.alert('Error', 'Please fill in all required fields');
@@ -145,13 +186,11 @@ const Notifications = ({ navigation }) => {
     try {      const formData = new FormData();
       formData.append('StudentID', newNotification.StudentID);
       formData.append('ClassID', newNotification.ClassID);
-      
-      // Format date as MM-DD-YYYY
-      const formattedDate = new Date(newNotification.Date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).split('/').join('-');
+        // Format date as YYYY-MM-DD
+      const dateObj = new Date(newNotification.Date);
+      const formattedDate = dateObj.getFullYear() + '-' + 
+                           String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(dateObj.getDate()).padStart(2, '0');
       formData.append('Date', formattedDate);
       
       formData.append('NotificationType', newNotification.NotificationType);
@@ -256,13 +295,26 @@ const Notifications = ({ navigation }) => {
                 {notification.status === 'unread' && (
                   <View style={styles.unreadDot} />
                 )}
+              </View>              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.editButton]}
+                  onPress={() => {
+                    setNewNotification({
+                      ...notification,
+                      Date: notification.Date.split('T')[0]
+                    });
+                    setModalVisible(true);
+                  }}
+                >
+                  <Ionicons name="pencil" size={20} color={COLORS.white} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={() => deleteNotification(notification.NotificationID)}
+                >
+                  <Ionicons name="trash" size={20} color={COLORS.white} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => deleteNotification(notification.NotificationID)}
-              >
-                <Ionicons name="trash" size={20} color={COLORS.white} />
-              </TouchableOpacity>
             </TouchableOpacity>
           ))
         )}
@@ -333,13 +385,14 @@ const Notifications = ({ navigation }) => {
                 <Ionicons name="close-circle-outline" size={20} color={COLORS.white} />
                 <Text style={styles.buttonText}>Cancel</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity
+                <TouchableOpacity
                 style={[styles.modalButton, styles.addButton]}
-                onPress={handleAddNotification}
+                onPress={newNotification.NotificationID ? handleUpdateNotification : handleAddNotification}
               >
                 <Ionicons name="add-circle-outline" size={20} color={COLORS.white} />
-                <Text style={styles.buttonText}>Add Notification</Text>
+                <Text style={styles.buttonText}>
+                  {newNotification.NotificationID ? 'Update Notification' : 'Add Notification'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -448,15 +501,23 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: COLORS.primary,
     marginLeft: 8,
+  },  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    margin: 8,
   },
-  deleteButton: {
+  actionButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F44336',
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 8,
+  },
+  editButton: {
+    backgroundColor: COLORS.primary,
+  },
+  deleteButton: {
+    backgroundColor: '#F44336',
   },
   modalContainer: {
     flex: 1,

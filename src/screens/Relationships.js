@@ -7,14 +7,107 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { Card } from '../components/Card';
 
+// Define AddRelationshipModalComponent OUTSIDE the Relationships component
+const AddRelationshipModalComponent = ({
+  visible,
+  relationshipData,
+  onRelationshipDataChange,
+  onCloseRequest,
+  onSaveRequest,
+}) => {
+  const validateForm = () => {
+    if (!relationshipData.StudentID?.trim() || !relationshipData.ParentID?.trim()) {
+      Alert.alert('Required Fields', 'Both Student ID and Parent ID are required.');
+      return false;
+    }
+    // Optional: Add numeric validation if IDs must be numbers
+    if (isNaN(Number(relationshipData.StudentID)) || isNaN(Number(relationshipData.ParentID))) {
+        Alert.alert('Invalid Input', 'Student ID and Parent ID must be numbers.');
+        return false;
+    }
+    return true;
+  };
+
+  const handleInternalSave = () => {
+    if (validateForm()) {
+      onSaveRequest();
+    }
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onCloseRequest} // Handles back button press on Android
+    >
+      <TouchableWithoutFeedback onPress={onCloseRequest}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{relationshipData.RelationshipID ? 'Edit Relationship' : 'Add New Relationship'}</Text>
+                <TouchableOpacity onPress={onCloseRequest}>
+                  <Ionicons name="close" size={24} color={COLORS.secondary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalForm}>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Student ID <Text style={{ color: 'red' }}>*</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={relationshipData.StudentID}
+                    onChangeText={(text) => onRelationshipDataChange({ ...relationshipData, StudentID: text })}
+                    placeholder="Enter Student ID"
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Parent ID <Text style={{ color: 'red' }}>*</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={relationshipData.ParentID}
+                    onChangeText={(text) => onRelationshipDataChange({ ...relationshipData, ParentID: text })}
+                    placeholder="Enter Parent ID"
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={onCloseRequest}>
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>                <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleInternalSave}>
+                  <Text style={styles.buttonText}>{relationshipData.RelationshipID ? 'Update' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+};
+
 const Relationships = ({ navigation }) => {
   const [relationships, setRelationships] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);  const [modalVisible, setModalVisible] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentRelationshipData, setCurrentRelationshipData] = useState({
+    StudentID: '',
+    ParentID: '',
+    RelationshipID: '',
+  });
 
   useEffect(() => {
     fetchRelationships();
@@ -77,6 +170,94 @@ const Relationships = ({ navigation }) => {
     );
   };
 
+  const handleAddRelationship = async () => {
+    if (!currentRelationshipData.StudentID.trim() || !currentRelationshipData.ParentID.trim()) {
+      Alert.alert('Error', 'Both Student ID and Parent ID are required');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('StudentID', currentRelationshipData.StudentID);
+      formData.append('ParentID', currentRelationshipData.ParentID);
+
+      const response = await fetch(
+        'http://192.168.43.253/ams_backend/api.php?table=studentparentrelationship&action=create',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      const result = await response.json();
+
+      if (result.status) {
+        Alert.alert('Success', 'Relationship added successfully');
+        closeModalAndResetForm();
+        fetchRelationships();
+      } else {
+        Alert.alert('Error', result.message || 'Failed to add relationship');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add relationship');
+      console.error(error);
+    }
+  };
+
+  const handleEdit = (relation) => {
+    setCurrentRelationshipData({
+      StudentID: relation.StudentID.toString(),
+      ParentID: relation.ParentID.toString(),
+      RelationshipID: relation.RelationshipID.toString(),
+    });
+    setIsEditing(true);
+    setModalVisible(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!currentRelationshipData.StudentID.trim() || !currentRelationshipData.ParentID.trim()) {
+      Alert.alert('Error', 'Both Student ID and Parent ID are required');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('id', currentRelationshipData.RelationshipID);
+      formData.append('StudentID', currentRelationshipData.StudentID);
+      formData.append('ParentID', currentRelationshipData.ParentID);
+
+      const response = await fetch(
+        'http://192.168.43.253/ams_backend/api.php?table=studentparentrelationship&action=update',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      const result = await response.json();
+
+      if (result.status) {
+        Alert.alert('Success', 'Relationship updated successfully');
+        closeModalAndResetForm();
+        fetchRelationships();
+      } else {
+        Alert.alert('Error', result.message || 'Failed to update relationship');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update relationship');
+      console.error(error);
+    }
+  };
+
+  const openAddModal = () => {
+    setCurrentRelationshipData({ StudentID: '', ParentID: '' }); // Reset form for new entry
+    setModalVisible(true);
+  };
+
+  const closeModalAndResetForm = () => {
+    setModalVisible(false);
+    setIsEditing(false);
+    setCurrentRelationshipData({ StudentID: '', ParentID: '', RelationshipID: '' });
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -93,43 +274,26 @@ const Relationships = ({ navigation }) => {
             <Text style={styles.emptyText}>No relationships found</Text>
           </View>
         ) : (
-          relationships.map((relation, index) => (
-            <Card key={relation.RelationshipID || index} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={styles.headerLeft}>
-                  <Text style={styles.title}>
-                    {relation.StudentName || 'Student Name'}
+          relationships.map((relation, index) => (            <Card key={relation.RelationshipID || index} style={styles.card}>
+              <View style={styles.cardContent}>
+                <View style={styles.infoRow}>
+                  <Ionicons name="key-outline" size={20} color={COLORS.secondary} />
+                  <Text style={styles.infoText}>
+                    Relationship ID: {relation.RelationshipID}
                   </Text>
-                  <Text style={styles.subtitle}>
+                </View>
+
+                <View style={styles.infoRow}>
+                  <Ionicons name="person-outline" size={20} color={COLORS.secondary} />
+                  <Text style={styles.infoText}>
                     Student ID: {relation.StudentID}
                   </Text>
                 </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {relation.RelationType || 'Parent'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.cardContent}>
-                <View style={styles.infoRow}>
-                  <Ionicons name="person" size={20} color={COLORS.secondary} />
-                  <Text style={styles.infoText}>
-                    Parent: {relation.ParentName || 'Parent Name'}
-                  </Text>
-                </View>
 
                 <View style={styles.infoRow}>
-                  <Ionicons name="call" size={20} color={COLORS.secondary} />
+                  <Ionicons name="people-outline" size={20} color={COLORS.secondary} />
                   <Text style={styles.infoText}>
-                    Contact: {relation.ParentPhone || 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Ionicons name="mail" size={20} color={COLORS.secondary} />
-                  <Text style={styles.infoText}>
-                    Email: {relation.ParentEmail || 'N/A'}
+                    Parent ID: {relation.ParentID}
                   </Text>
                 </View>
               </View>
@@ -137,7 +301,7 @@ const Relationships = ({ navigation }) => {
               <View style={styles.cardFooter}>
                 <TouchableOpacity
                   style={[styles.actionButton, styles.editButton]}
-                  onPress={() => navigation.navigate('EditRelationship', { relation })}
+                  onPress={() => handleEdit(relation)}
                 >
                   <Ionicons name="pencil" size={16} color={COLORS.white} />
                   <Text style={styles.buttonText}>Edit</Text>
@@ -157,10 +321,18 @@ const Relationships = ({ navigation }) => {
 
       <TouchableOpacity 
         style={styles.fab}
-        onPress={() => navigation.navigate('AddRelationship')}
+        onPress={openAddModal}
       >
         <Ionicons name="add" size={24} color={COLORS.white} />
       </TouchableOpacity>
+
+      <AddRelationshipModalComponent
+        visible={modalVisible}
+        relationshipData={currentRelationshipData}
+        onRelationshipDataChange={setCurrentRelationshipData}
+        onCloseRequest={closeModalAndResetForm}
+        onSaveRequest={isEditing ? handleUpdate : handleAddRelationship}
+      />
     </View>
   );
 };
@@ -288,6 +460,72 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    elevation: 4,
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
+  modalForm: {
+    marginBottom: 16,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: COLORS.secondary,
+    marginBottom: 8,
+  },
+  input: {
+    height: 40,
+    borderColor: COLORS.lightGray,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: COLORS.secondary,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: COLORS.lightGray,
+  },
+  saveButton: {
+    backgroundColor: COLORS.primary,
   },
 });
 

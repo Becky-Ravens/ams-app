@@ -2,16 +2,178 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Modal,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
+  TextInput,
+  ScrollView,
   Alert,
   ActivityIndicator,
-  Modal,
-  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
+
+// Define AddParentModalComponent OUTSIDE the Parents component
+const AddParentModalComponent = ({
+  visible,
+  isEditing,
+  parentData,
+  originalParentDataForEdit, // For accurate "unsaved changes" check in edit mode
+  onParentDataChange,
+  onCloseRequest,
+  onSaveRequest,
+}) => {
+  const validateForm = () => {
+    const requiredFields = {
+      FirstName: 'First Name',
+      LastName: 'Last Name',
+      RelationshipToStudent: 'Relationship to Student',
+      ContactInformation: 'Contact Information',
+    };
+
+    for (const [field, label] of Object.entries(requiredFields)) {
+      if (!parentData[field]?.trim()) {
+        Alert.alert('Required Field', `${label} is required`);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const internalHandleClose = () => {
+    let hasUnsavedChanges = false;
+    const currentFormFields = {
+        FirstName: parentData.FirstName || '',
+        LastName: parentData.LastName || '',
+        RelationshipToStudent: parentData.RelationshipToStudent || '',
+        ContactInformation: parentData.ContactInformation || '',
+    };
+
+    if (isEditing && originalParentDataForEdit) {
+        const originalFields = {
+            FirstName: originalParentDataForEdit.FirstName || '',
+            LastName: originalParentDataForEdit.LastName || '',
+            RelationshipToStudent: originalParentDataForEdit.RelationshipToStudent || '',
+            ContactInformation: originalParentDataForEdit.ContactInformation || '',
+        };
+        hasUnsavedChanges = Object.keys(currentFormFields).some(
+            key => currentFormFields[key].trim() !== originalFields[key].trim()
+        );
+    } else if (!isEditing) { // Adding new
+        hasUnsavedChanges = Object.values(currentFormFields).some(value => value.trim() !== '');
+    }
+
+    if (hasUnsavedChanges) {
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes. Are you sure you want to close?',
+        [
+          { text: 'No', style: 'cancel' },
+          { text: 'Yes', style: 'destructive', onPress: onCloseRequest },
+        ]
+      );
+    } else {
+      onCloseRequest();
+    }
+  };
+
+  const handleSave = () => {
+    if (validateForm()) {
+      onSaveRequest();
+    }
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={internalHandleClose}
+    >
+      <TouchableWithoutFeedback onPress={e => {
+        if (e.target === e.currentTarget) {
+          internalHandleClose();
+        }
+      }}>
+        <View style={styles.modalContainer}>
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{isEditing ? 'Edit Parent' : 'Add New Parent'}</Text>
+                <TouchableOpacity onPress={internalHandleClose}>
+                  <Ionicons name="close" size={24} color={COLORS.secondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.modalForm}>
+                {/* Input fields remain the same, using parentData and onParentDataChange */}
+                {/* FirstName */}
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>First Name <Text style={{ color: 'red' }}>*</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={parentData.FirstName}
+                    onChangeText={(text) => onParentDataChange({ ...parentData, FirstName: text })}
+                    placeholder="Enter first name"
+                    returnKeyType="next"
+                  />
+                </View>
+                {/* LastName */}
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Last Name <Text style={{ color: 'red' }}>*</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={parentData.LastName}
+                    onChangeText={(text) => onParentDataChange({ ...parentData, LastName: text })}
+                    placeholder="Enter last name"
+                    returnKeyType="next"
+                  />
+                </View>
+                {/* ContactInformation */}
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Contact Information <Text style={{ color: 'red' }}>*</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={parentData.ContactInformation}
+                    onChangeText={(text) => onParentDataChange({ ...parentData, ContactInformation: text })}
+                    placeholder="Enter email or phone number"
+                    keyboardType="email-address"
+                    returnKeyType="next"
+                  />
+                </View>
+                {/* RelationshipToStudent */}
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Relationship to Student <Text style={{ color: 'red' }}>*</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={parentData.RelationshipToStudent}
+                    onChangeText={(text) => onParentDataChange({ ...parentData, RelationshipToStudent: text })}
+                    placeholder="Enter relationship (e.g., Father, Mother)"
+                    returnKeyType="done"
+                  />
+                </View>
+              </ScrollView>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={internalHandleClose}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={handleSave}
+                >
+                  <Text style={styles.buttonText}>{isEditing ? 'Update' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+};
 
 const Parents = ({ navigation }) => {
   const [parentsData, setParentsData] = useState([]);
@@ -19,13 +181,13 @@ const Parents = ({ navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [newParent, setNewParent] = useState({
+    ParentID: '',
     FirstName: '',
     LastName: '',
-    Email: '',
-    Phone: '',
-    Address: '',
-    Relationship: '',
+    RelationshipToStudent: '',
+    ContactInformation: '',
   });
+  const [originalParentForEdit, setOriginalParentForEdit] = useState(null);
 
   useEffect(() => {
     fetchParentsData();
@@ -34,9 +196,19 @@ const Parents = ({ navigation }) => {
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity 
-          onPress={() => setModalVisible(true)} 
-          style={{ 
+        <TouchableOpacity
+          onPress={() => {
+            setIsEditing(false);
+            setNewParent({ // Clear form for new add
+              ParentID: '',
+              FirstName: '',
+              LastName: '',
+              RelationshipToStudent: '',
+              ContactInformation: '',
+            });
+            setModalVisible(true);
+          }}
+          style={{
             marginRight: 15,
             padding: 8,
             backgroundColor: COLORS.primary,
@@ -50,18 +222,18 @@ const Parents = ({ navigation }) => {
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
-
+  }, [navigation]); // React guarantees setState functions are stable
   const fetchParentsData = async () => {
     setLoading(true);
     try {
       const response = await fetch('http://192.168.43.253/ams_backend/parentsapi.php?action=read');
       const result = await response.json();
-      
-      if (result.status) {
-        setParentsData(result.data); // result.data is now an array
+      console.log('API Response:', result); // Add logging to debug
+
+      if (result.data) {
+        setParentsData(result.data);
       } else {
-        Alert.alert('Error', result.message);
+        Alert.alert('Error', result.message || 'Failed to fetch parent data');
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch parent contacts');
@@ -82,14 +254,11 @@ const Parents = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const formData = new FormData();
-              formData.append('id', id);
-
+              // Corrected: Use DELETE method and pass ID in URL
               const response = await fetch(
-                'http://192.168.43.253/ams_backend/parentsapi.php?action=delete',
+                `http://192.168.43.253/ams_backend/parentsapi.php/${id}`,
                 {
-                  method: 'POST',
-                  body: formData,
+                  method: 'DELETE',
                 }
               );
               const result = await response.json();
@@ -112,16 +281,15 @@ const Parents = ({ navigation }) => {
 
   const handleAddParent = async () => {
     try {
-      const formData = new FormData();
-      Object.keys(newParent).forEach(key => {
-        formData.append(key, newParent[key]);
-      });
-
+      // Corrected: Send data as JSON
       const response = await fetch(
-        'http://192.168.43.253/ams_backend/parentsapi.php?action=create',
+        'http://192.168.43.253/ams_backend/parentsapi.php', // Removed action=create, POST implies create
         {
           method: 'POST',
-          body: formData,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newParent),
         }
       );
       const result = await response.json();
@@ -138,46 +306,42 @@ const Parents = ({ navigation }) => {
       console.error(error);
     }
   };
-
   const handleEdit = (parent) => {
     setNewParent({
-      ContactID: parent.ContactID,
+      ParentID: parent.ParentID,
       FirstName: parent.FirstName || '',
       LastName: parent.LastName || '',
-      Email: parent.Email || '',
-      Phone: parent.Phone || '',
-      Address: parent.Address || '',
-      Relationship: parent.Relationship || '',
+      RelationshipToStudent: parent.RelationshipToStudent || '',
+      ContactInformation: parent.ContactInformation || '',
     });
+    setOriginalParentForEdit(parent); // Store original data for comparison
     setIsEditing(true);
     setModalVisible(true);
   };
 
   const resetForm = () => {
     setNewParent({
+      ParentID: '',
       FirstName: '',
       LastName: '',
-      Email: '',
-      Phone: '',
-      Address: '',
-      Relationship: '',
+      RelationshipToStudent: '',
+      ContactInformation: '',
     });
+    setOriginalParentForEdit(null);
     setIsEditing(false);
     setModalVisible(false);
   };
-
   const handleUpdate = async () => {
     try {
-      const formData = new FormData();
-      Object.keys(newParent).forEach(key => {
-        formData.append(key, newParent[key]);
-      });
-
+      // Corrected: Send data as JSON, use PUT method, and ID in URL
       const response = await fetch(
-        'http://192.168.43.253/ams_backend/api.php?action=update',
+        `http://192.168.43.253/ams_backend/parentsapi.php/${newParent.ParentID}`,
         {
-          method: 'POST',
-          body: formData,
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newParent),
         }
       );
       const result = await response.json();
@@ -195,105 +359,13 @@ const Parents = ({ navigation }) => {
     }
   };
 
-  const AddParentModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={modalVisible}
-      onRequestClose={resetForm}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{isEditing ? 'Edit Parent' : 'Add New Parent'}</Text>
-            <TouchableOpacity onPress={resetForm}>
-              <Ionicons name="close" size={24} color={COLORS.secondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalForm}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>First Name</Text>
-              <TextInput
-                style={styles.input}
-                value={newParent.FirstName}
-                onChangeText={(text) => setNewParent({...newParent, FirstName: text})}
-                placeholder="Enter first name"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Last Name</Text>
-              <TextInput
-                style={styles.input}
-                value={newParent.LastName}
-                onChangeText={(text) => setNewParent({...newParent, LastName: text})}
-                placeholder="Enter last name"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={newParent.Email}
-                onChangeText={(text) => setNewParent({...newParent, Email: text})}
-                placeholder="Enter email"
-                keyboardType="email-address"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Phone</Text>
-              <TextInput
-                style={styles.input}
-                value={newParent.Phone}
-                onChangeText={(text) => setNewParent({...newParent, Phone: text})}
-                placeholder="Enter phone number"
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Address</Text>
-              <TextInput
-                style={styles.input}
-                value={newParent.Address}
-                onChangeText={(text) => setNewParent({...newParent, Address: text})}
-                placeholder="Enter address"
-                multiline
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Relationship</Text>
-              <TextInput
-                style={styles.input}
-                value={newParent.Relationship}
-                onChangeText={(text) => setNewParent({...newParent, Relationship: text})}
-                placeholder="Enter relationship"
-              />
-            </View>
-          </ScrollView>
-
-          <View style={styles.modalFooter}>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.cancelButton]} 
-              onPress={resetForm}
-            >
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.saveButton]} 
-              onPress={isEditing ? handleUpdate : handleAddParent}
-            >
-              <Text style={styles.buttonText}>{isEditing ? 'Update' : 'Save'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+  const handleModalSave = () => {
+    if (isEditing) {
+      handleUpdate();
+    } else {
+      handleAddParent();
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -313,18 +385,18 @@ const Parents = ({ navigation }) => {
               <View key={parent.ParentID || index} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <View style={styles.headerLeft}>
-                    <Text style={styles.parentId}>ID: {parent.ParentID}</Text>
+                    <Text style={styles.parentId}>Parent ID: {parent.ParentID}</Text>
                     <Text style={styles.name}>{parent.FirstName} {parent.LastName}</Text>
                   </View>
                 </View>
                 <View style={styles.cardContent}>
                   <View style={styles.infoRow}>
-                    <Ionicons name="call-outline" size={16} color={COLORS.secondary} />
-                    <Text style={styles.infoText}>{parent.Phone}</Text>
+                    <Ionicons name="people-outline" size={16} color={COLORS.secondary} />
+                    <Text style={styles.infoText}>Relationship: {parent.RelationshipToStudent}</Text>
                   </View>
                   <View style={styles.infoRow}>
                     <Ionicons name="mail-outline" size={16} color={COLORS.secondary} />
-                    <Text style={styles.infoText}>{parent.Email}</Text>
+                    <Text style={styles.infoText}>Contact: {parent.ContactInformation}</Text>
                   </View>
                 </View>
                 <View style={styles.cardFooter}>
@@ -348,7 +420,15 @@ const Parents = ({ navigation }) => {
           )}
         </ScrollView>
       )}
-      <AddParentModal />
+      <AddParentModalComponent
+        visible={modalVisible}
+        isEditing={isEditing}
+        parentData={newParent}
+        originalParentDataForEdit={originalParentForEdit}
+        onParentDataChange={setNewParent}
+        onCloseRequest={resetForm}
+        onSaveRequest={handleModalSave}
+      />
     </View>
   );
 };
